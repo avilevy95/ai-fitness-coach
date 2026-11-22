@@ -1,15 +1,29 @@
 {
   "expo": {
-    "name": "animated-memory-34bb312b",
-    "slug": "animated-memory-34bb312b",
+    "name": "מאמן הכושר שלי",
+    "slug": "ai-fitness-coach",
     "version": "1.0.0",
     "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "supportsRTL": true,
+    "plugins": [
+      "expo-router",
+      "expo-video",
+      "expo-secure-store",
+      "expo-localization",
+      "expo-notifications"
+    ],
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "האפליקציה זקוקה למצלמה כדי לנתח את תנועות האימון בזמן אמת",
+        "NSMicrophoneUsageDescription": "האפליקציה משתמשת במיקרופון לצורך אינטראקציה קולית במהלך האימון"
+      }
     },
     "android": {
+      "supportsRTL": true,
+      "permissions": ["android.permission.CAMERA", "android.permission.RECORD_AUDIO"],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
