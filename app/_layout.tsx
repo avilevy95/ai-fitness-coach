@@ -61,7 +61,9 @@ export default function RootLayout() {
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      loadUserData(Boolean(session));
+      setTimeout(() => {
+        void loadUserData(Boolean(session));
+      }, 0);
     });
 
     return () => {
@@ -88,6 +90,7 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="auth" options={{ gestureEnabled: false }} />
+        <Stack.Screen name="callback" options={{ gestureEnabled: false }} />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="workout" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="summary" options={{ presentation: 'modal' }} />

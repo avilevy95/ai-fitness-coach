@@ -4,6 +4,7 @@
     "slug": "ai-fitness-coach",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "aifitnesscoach",
     "userInterfaceStyle": "dark",
     "supportsRTL": true,
     "plugins": [
@@ -27,7 +28,8 @@
           }
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-web-browser"
     ],
     "icon": "./assets/icon.png",
     "ios": {

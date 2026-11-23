@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { HebrewInput } from '../src/components/ui/HebrewInput';
 import { PrimaryButton } from '../src/components/ui/PrimaryButton';
 import { theme } from '../src/components/ui/theme';
+import { AUTH_CALLBACK_URL, completeAuthCallback } from '../src/services/authCallback';
 import { supabase } from '../src/services/supabaseClient';
 
 export default function AuthRoute() {
@@ -26,6 +28,9 @@ export default function AuthRoute() {
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
+          options: {
+            emailRedirectTo: AUTH_CALLBACK_URL,
+          },
         });
         if (error) throw error;
         if (!data.session) {
@@ -42,6 +47,31 @@ export default function AuthRoute() {
       router.replace('/(tabs)');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'ההתחברות נכשלה.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    setMessage(null);
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: AUTH_CALLBACK_URL,
+          skipBrowserRedirect: true,
+        },
+      });
+      if (error) throw error;
+      if (!data.url) throw new Error('לא התקבל קישור התחברות מ-Google.');
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, AUTH_CALLBACK_URL);
+      if (result.type === 'success') {
+        await completeAuthCallback(result.url);
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'ההתחברות עם Google נכשלה.');
     } finally {
       setLoading(false);
     }
@@ -81,6 +111,12 @@ export default function AuthRoute() {
         <PrimaryButton
           title={mode === 'signin' ? 'התחברות' : 'יצירת חשבון'}
           onPress={submit}
+          loading={loading}
+        />
+        <PrimaryButton
+          title="המשך עם Google"
+          variant="secondary"
+          onPress={signInWithGoogle}
           loading={loading}
         />
         <Pressable
