@@ -18,7 +18,16 @@
           "microphonePermission": "האפליקציה משתמשת במיקרופון לצורך אינטראקציה קולית במהלך האימון",
           "enableBackgroundPlayback": false
         }
-      ]
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
+      "expo-asset"
     ],
     "icon": "./assets/icon.png",
     "ios": {
@@ -29,7 +38,6 @@
       }
     },
     "android": {
-      "supportsRTL": true,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"

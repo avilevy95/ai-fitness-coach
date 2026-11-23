@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { HebrewInput } from '../components/ui/HebrewInput';
 import { PrimaryButton } from '../components/ui/PrimaryButton';
 import { ScreenContainer } from '../components/ui/ScreenContainer';
@@ -7,6 +8,8 @@ import { theme } from '../components/ui/theme';
 import { usePlanStore } from '../store/usePlanStore';
 import { useUserStore } from '../store/useUserStore';
 import type { UserProfile } from '../types/workout.types';
+import { upsertProfile } from '../services/api';
+import { supabase } from '../services/supabaseClient';
 
 interface ProfileScreenProps {
   onOnboarding?: () => void;
@@ -19,27 +22,21 @@ export default function ProfileScreen({ onOnboarding, onSaved }: ProfileScreenPr
   const generate = usePlanStore((state) => state.generate);
   const isGenerating = usePlanStore((state) => state.isGenerating);
   const planError = usePlanStore((state) => state.error);
-  const [age, setAge] = useState('');
-  const [weight, setWeight] = useState('');
-  const [height, setHeight] = useState('');
-  const [fitnessLevel, setFitnessLevel] = useState<UserProfile['fitnessLevel']>('beginner');
-  const [preferredDays, setPreferredDays] = useState<number[]>([]);
-  const [minutesPerSession, setMinutesPerSession] = useState(30);
-  const [goals, setGoals] = useState<string[]>([]);
-  const [equipment, setEquipment] = useState<string[]>([]);
+  const [age, setAge] = useState(() => (profile ? String(profile.age) : ''));
+  const [weight, setWeight] = useState(() => (profile ? String(profile.weightKg) : ''));
+  const [height, setHeight] = useState(() => (profile ? String(profile.heightCm) : ''));
+  const [fitnessLevel, setFitnessLevel] = useState<UserProfile['fitnessLevel']>(
+    () => profile?.fitnessLevel ?? 'beginner',
+  );
+  const [preferredDays, setPreferredDays] = useState<number[]>(
+    () => profile?.preferredDays ?? [],
+  );
+  const [minutesPerSession, setMinutesPerSession] = useState(
+    () => profile?.minutesPerSession ?? 30,
+  );
+  const [goals, setGoals] = useState<string[]>(() => profile?.goals ?? []);
+  const [equipment, setEquipment] = useState<string[]>(() => profile?.equipment ?? []);
   const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!profile) return;
-    setAge(String(profile.age));
-    setWeight(String(profile.weightKg));
-    setHeight(String(profile.heightCm));
-    setFitnessLevel(profile.fitnessLevel);
-    setPreferredDays(profile.preferredDays);
-    setMinutesPerSession(profile.minutesPerSession);
-    setGoals(profile.goals);
-    setEquipment(profile.equipment);
-  }, [profile]);
 
   if (!profile) {
     return (
@@ -72,6 +69,12 @@ export default function ProfileScreen({ onOnboarding, onSaved }: ProfileScreenPr
       return;
     }
     updateProfile(next);
+    try {
+      await upsertProfile(next);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'לא הצלחנו לשמור את הפרופיל כרגע.');
+      return;
+    }
     setMessage(null);
     try {
       await generate(next);
@@ -166,6 +169,14 @@ export default function ProfileScreen({ onOnboarding, onSaved }: ProfileScreenPr
       </View>
       {message || planError ? <Text style={styles.message}>{message ?? planError}</Text> : null}
       <PrimaryButton title="שומרים ומעדכנים תוכנית" onPress={save} loading={isGenerating} />
+      <PrimaryButton
+        title="יציאה מהחשבון"
+        variant="secondary"
+        onPress={async () => {
+          await supabase.auth.signOut();
+          router.replace('/auth');
+        }}
+      />
     </ScreenContainer>
   );
 }

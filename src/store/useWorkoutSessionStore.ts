@@ -8,6 +8,7 @@ interface WorkoutSessionStore {
   startWorkout: (workout: WorkoutSessionPlan, startedAt?: string) => void;
   clearActiveWorkout: () => void;
   saveSession: (session: SessionResult) => void;
+  setSessions: (sessions: SessionResult[]) => void;
 }
 
 export const useWorkoutSessionStore = create<WorkoutSessionStore>((set) => ({
@@ -23,4 +24,5 @@ export const useWorkoutSessionStore = create<WorkoutSessionStore>((set) => ({
       activeWorkout: null,
       activeStartedAt: null,
     })),
+  setSessions: (sessions) => set({ sessions }),
 }));

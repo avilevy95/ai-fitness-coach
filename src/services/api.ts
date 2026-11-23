@@ -16,6 +16,28 @@ type CoachMediaAsset = CoachMediaAssetRow & {
   priority: number;
 };
 
+function getProfileSaveError(code: string | undefined): Error {
+  switch (code) {
+    case '42501':
+      return new Error(
+        'חסרות הרשאות לטבלת הפרופילים ב-Supabase. צריך להחיל את המיגרציה 002_authenticated_table_grants.sql.',
+      );
+    case '42P01':
+    case 'PGRST205':
+      return new Error(
+        'טבלת הפרופילים לא הוגדרה ב-Supabase. צריך להחיל את המיגרציה 001_initial_schema.sql.',
+      );
+    case '42P10':
+      return new Error(
+        'חסר מפתח ייחודי לשמירת הפרופיל ב-Supabase. צריך להחיל את המיגרציה 001_initial_schema.sql.',
+      );
+    default:
+      return new Error(
+        `לא הצלחנו לשמור את הפרופיל כרגע${code ? ` (קוד ${code})` : ''}.`,
+      );
+  }
+}
+
 async function getCurrentUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser();
 
@@ -55,7 +77,7 @@ export async function upsertProfile(profile: UserProfile): Promise<ProfileRow> {
     .single();
 
   if (error) {
-    throw error;
+    throw getProfileSaveError(error.code);
   }
   return data;
 }
@@ -95,6 +117,20 @@ export async function saveWorkoutResult(
     throw error;
   }
   return data;
+}
+
+export async function getWorkoutSessions(): Promise<WorkoutSessionRow[]> {
+  const userId = await getCurrentUserId();
+  const { data, error } = await supabase
+    .from('workout_sessions')
+    .select('*')
+    .eq('user_id', userId)
+    .order('completed_at', { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+  return data ?? [];
 }
 
 export async function getNutritionPlan(): Promise<NutritionPlanRow | null> {
