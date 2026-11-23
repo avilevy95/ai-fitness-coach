@@ -7,6 +7,7 @@ import { theme } from '../components/ui/theme';
 import { useUserStore } from '../store/useUserStore';
 import { useWorkoutSessionStore } from '../store/useWorkoutSessionStore';
 import type { SessionResult } from '../types/workout.types';
+import { saveWorkoutResult } from '../services/api';
 
 interface WorkoutSummaryScreenProps {
   result: SessionResult;
@@ -21,10 +22,16 @@ export default function WorkoutSummaryScreen({ result, onDone }: WorkoutSummaryS
   const durationMinutes = Math.round(result.durationSeconds / 60);
   const accuracy = Math.round(result.averageAccuracy);
 
-  const save = () => {
+  const save = async () => {
     if (!saved) {
-      saveSession({ ...result, ...(userId ? { userId } : {}) });
-      setSaved(true);
+      const session = { ...result, ...(userId ? { userId } : {}) };
+      try {
+        await saveWorkoutResult(session);
+        saveSession(session);
+        setSaved(true);
+      } catch {
+        return;
+      }
     }
     clearActiveWorkout();
     onDone?.();

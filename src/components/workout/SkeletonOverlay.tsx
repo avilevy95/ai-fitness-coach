@@ -1,38 +1,6 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Canvas, Circle, Line } from '@shopify/react-native-skia';
-import type {
-  BoneConnection,
-  JointName,
-  JointStatus,
-  LandmarkPoint,
-} from '../../types/pose.types';
-
-export const BONE_CONNECTIONS: readonly BoneConnection[] = [
-  { from: 'left_shoulder', to: 'right_shoulder' },
-  { from: 'left_shoulder', to: 'left_elbow' },
-  { from: 'left_elbow', to: 'left_wrist' },
-  { from: 'right_shoulder', to: 'right_elbow' },
-  { from: 'right_elbow', to: 'right_wrist' },
-  { from: 'left_shoulder', to: 'left_hip' },
-  { from: 'right_shoulder', to: 'right_hip' },
-  { from: 'left_hip', to: 'right_hip' },
-  { from: 'left_hip', to: 'left_knee' },
-  { from: 'left_knee', to: 'left_ankle' },
-  { from: 'right_hip', to: 'right_knee' },
-  { from: 'right_knee', to: 'right_ankle' },
-];
-
-export type SkeletonLandmarks =
-  | Partial<Record<JointName, LandmarkPoint>>
-  | readonly LandmarkPoint[];
-
-export type SkeletonOverlayProps = {
-  landmarks?: SkeletonLandmarks | null;
-  jointStatuses?: Partial<Record<JointName, JointStatus>>;
-  width?: number;
-  height?: number;
-};
+import { PaintStyle, Skia, StrokeCap } from '@shopify/react-native-skia';
+import type { SkCanvas } from '@shopify/react-native-skia';
+import type { JointName, LandmarkPoint } from '../../types/pose.types';
 
 const JOINT_INDICES: Record<JointName, number> = {
   nose: 0,
@@ -50,112 +18,69 @@ const JOINT_INDICES: Record<JointName, number> = {
   right_ankle: 28,
 };
 
-function getPoint(
-  landmarks: SkeletonLandmarks,
-  joint: JointName,
-): LandmarkPoint | undefined {
-  if (Array.isArray(landmarks)) {
-    return landmarks[JOINT_INDICES[joint]];
+const JOINTS = Object.keys(JOINT_INDICES) as JointName[];
+const BONE_CONNECTIONS: readonly (readonly [JointName, JointName])[] = [
+  ['left_shoulder', 'right_shoulder'],
+  ['left_shoulder', 'left_elbow'],
+  ['left_elbow', 'left_wrist'],
+  ['right_shoulder', 'right_elbow'],
+  ['right_elbow', 'right_wrist'],
+  ['left_shoulder', 'left_hip'],
+  ['right_shoulder', 'right_hip'],
+  ['left_hip', 'right_hip'],
+  ['left_hip', 'left_knee'],
+  ['left_knee', 'left_ankle'],
+  ['right_hip', 'right_knee'],
+  ['right_knee', 'right_ankle'],
+];
+
+const MIN_VISIBILITY = 0.3;
+
+export function drawSkeletonOverlay(
+  canvas: SkCanvas,
+  landmarks: readonly LandmarkPoint[],
+  frameWidth: number,
+  frameHeight: number,
+): void {
+  'worklet';
+
+  const bonePaint = Skia.Paint();
+  bonePaint.setColor(Skia.Color('#C4F278'));
+  bonePaint.setStyle(PaintStyle.Stroke);
+  bonePaint.setStrokeCap(StrokeCap.Round);
+  bonePaint.setStrokeWidth(Math.max(frameWidth * 0.009, 5));
+
+  for (const [fromJoint, toJoint] of BONE_CONNECTIONS) {
+    const from = landmarks[JOINT_INDICES[fromJoint]];
+    const to = landmarks[JOINT_INDICES[toJoint]];
+    if (!from || !to || from.visibility < MIN_VISIBILITY || to.visibility < MIN_VISIBILITY) {
+      continue;
+    }
+
+    canvas.drawLine(
+      from.x * frameWidth,
+      from.y * frameHeight,
+      to.x * frameWidth,
+      to.y * frameHeight,
+      bonePaint,
+    );
   }
-  return (landmarks as Partial<Record<JointName, LandmarkPoint>>)[joint];
+
+  const visibleJointPaint = Skia.Paint();
+  visibleJointPaint.setColor(Skia.Color('#C4F278'));
+  const uncertainJointPaint = Skia.Paint();
+  uncertainJointPaint.setColor(Skia.Color('#FFB875'));
+  const jointRadius = Math.max(frameWidth * 0.017, 8);
+
+  for (const joint of JOINTS) {
+    const point = landmarks[JOINT_INDICES[joint]];
+    if (!point || point.visibility < MIN_VISIBILITY) continue;
+
+    canvas.drawCircle(
+      point.x * frameWidth,
+      point.y * frameHeight,
+      jointRadius,
+      point.visibility >= 0.65 ? visibleJointPaint : uncertainJointPaint,
+    );
+  }
 }
-
-export function SkeletonOverlay({
-  landmarks,
-  jointStatuses,
-  width,
-  height,
-}: SkeletonOverlayProps): React.ReactElement {
-  const [size, setSize] = React.useState({ width: width ?? 0, height: height ?? 0 });
-
-  React.useEffect(() => {
-    if (width !== undefined && height !== undefined) setSize({ width, height });
-  }, [width, height]);
-
-  const scalePoint = (point: LandmarkPoint): [number, number] => {
-    const isNormalized = point.x <= 1 && point.y <= 1;
-    return [
-      isNormalized ? point.x * size.width : point.x,
-      isNormalized ? point.y * size.height : point.y,
-    ];
-  };
-
-  const joints: readonly JointName[] = [
-    'nose',
-    'left_shoulder',
-    'right_shoulder',
-    'left_elbow',
-    'right_elbow',
-    'left_wrist',
-    'right_wrist',
-    'left_hip',
-    'right_hip',
-    'left_knee',
-    'right_knee',
-    'left_ankle',
-    'right_ankle',
-  ];
-
-  return (
-    <View
-      style={[
-        styles.overlay,
-        width !== undefined ? { width } : null,
-        height !== undefined ? { height } : null,
-      ]}
-      onLayout={(event) => {
-        if (width === undefined || height === undefined) {
-          setSize({
-            width: event.nativeEvent.layout.width,
-            height: event.nativeEvent.layout.height,
-          });
-        }
-      }}
-    >
-      <Canvas style={StyleSheet.absoluteFill}>
-        {landmarks
-          ? BONE_CONNECTIONS.map((connection) => {
-              const from = getPoint(landmarks, connection.from);
-              const to = getPoint(landmarks, connection.to);
-              if (!from || !to) return null;
-              const [x1, y1] = scalePoint(from);
-              const [x2, y2] = scalePoint(to);
-              const status = jointStatuses?.[connection.from]
-                ?? jointStatuses?.[connection.to]
-                ?? 'neutral';
-              const color = status === 'ok' ? '#34C759' : status === 'error' ? '#FF3B30' : '#FFD60A';
-              return (
-                <Line
-                  key={`${connection.from}-${connection.to}`}
-                  p1={{ x: x1, y: y1 }}
-                  p2={{ x: x2, y: y2 }}
-                  color={color}
-                  strokeWidth={5}
-                />
-              );
-            })
-          : null}
-        {landmarks
-          ? joints.map((joint) => {
-              const point = getPoint(landmarks, joint);
-              if (!point) return null;
-              const [x, y] = scalePoint(point);
-              const status = jointStatuses?.[joint] ?? 'neutral';
-              const color = status === 'ok' ? '#34C759' : status === 'error' ? '#FF3B30' : '#FFD60A';
-              return (
-                <Circle key={joint} cx={x} cy={y} r={7} color={color} />
-              );
-            })
-          : null}
-      </Canvas>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFill,
-  },
-});
-
-export default SkeletonOverlay;

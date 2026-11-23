@@ -1,55 +1,130 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSharedValue, type SharedValue } from 'react-native-reanimated';
+import { SkiaCamera, type SkiaCameraProps } from 'react-native-vision-camera-skia';
 import {
   Camera,
   useCameraDevice,
   useCameraPermission,
-  useFrameOutput,
 } from 'react-native-vision-camera';
-import type { Frame } from 'react-native-vision-camera';
+import { nitroPoseExercises } from 'react-native-nitro-pose-exercises';
 import type { ExercisePrescription } from '../../types/workout.types';
-import type { ExerciseRepState, LandmarkPoint, JointName } from '../../types/pose.types';
-import SkeletonOverlay from './SkeletonOverlay';
+import type { ExerciseRepState } from '../../types/pose.types';
+import { drawSkeletonOverlay } from './SkeletonOverlay';
 
 export type SplitWorkoutScreenProps = {
   exercise: ExercisePrescription;
   repState?: ExerciseRepState;
-  landmarks?: Partial<Record<JointName, LandmarkPoint>> | readonly LandmarkPoint[] | null;
   paused?: boolean;
   onPause?: () => void;
   onSkip?: () => void;
-  onFrame?: (frame: Frame) => void;
 };
 
-function useSkiaFrameProcessor(frameCallback?: (frame: Frame) => void) {
-  return useFrameOutput({
-    pixelFormat: 'yuv',
-    dropFramesWhileBusy: true,
-    onFrame(frame) {
-      'worklet';
-      frameCallback?.(frame);
-    },
-  });
+function useSkiaFrameProcessor(
+  isAndroid: boolean,
+  poseVisible: SharedValue<boolean>,
+  hasDetectedPose: SharedValue<boolean>,
+): NonNullable<SkiaCameraProps['onFrame']> {
+  return useCallback((frame, render) => {
+    'worklet';
+
+    try {
+      if (isAndroid) {
+        nitroPoseExercises.processFrameAndroid(frame);
+      } else {
+        nitroPoseExercises.processFrameIOS(frame);
+      }
+
+      const landmarks = nitroPoseExercises.landmarks;
+      if (!hasDetectedPose.value) {
+        for (const landmark of landmarks) {
+          if (landmark.visibility >= 0.3) {
+            hasDetectedPose.value = true;
+            poseVisible.value = true;
+            break;
+          }
+        }
+      }
+
+      const frameWidth = frame.width;
+      const frameHeight = frame.height;
+      render(({ canvas, frameTexture }) => {
+        'worklet';
+        canvas.drawImage(frameTexture, 0, 0);
+        if (poseVisible.value) {
+          drawSkeletonOverlay(canvas, landmarks, frameWidth, frameHeight);
+        }
+      });
+    } finally {
+      frame.dispose();
+    }
+  }, [hasDetectedPose, isAndroid, poseVisible]);
 }
 
 export function SplitWorkoutScreen({
   exercise,
   repState,
-  landmarks,
   paused = false,
   onPause,
   onSkip,
-  onFrame,
 }: SplitWorkoutScreenProps): React.ReactElement {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
-  const frameOutput = useSkiaFrameProcessor(onFrame);
   const [permissionRequested, setPermissionRequested] = useState(false);
+  const [poseEngineReady, setPoseEngineReady] = useState(false);
+  const [poseEngineUnavailable, setPoseEngineUnavailable] = useState(false);
+  const [cameraFailed, setCameraFailed] = useState(false);
+  const poseVisible = useSharedValue(true);
+  const hasDetectedPose = useSharedValue(false);
+  const frameProcessor = useSkiaFrameProcessor(
+    Platform.OS === 'android',
+    poseVisible,
+    hasDetectedPose,
+  );
 
   const requestCamera = useCallback(async () => {
     setPermissionRequested(true);
     await requestPermission();
   }, [requestPermission]);
+
+  useEffect(() => {
+    if (!hasPermission) return undefined;
+
+    let disposed = false;
+    let initialized = false;
+
+    const initializePoseEngine = async () => {
+      try {
+        await nitroPoseExercises.initialize('');
+        initialized = true;
+        if (disposed) {
+          nitroPoseExercises.release();
+          return;
+        }
+
+        nitroPoseExercises.onPoseLost = () => {
+          poseVisible.value = false;
+        };
+        nitroPoseExercises.onPoseRegained = () => {
+          hasDetectedPose.value = true;
+          poseVisible.value = true;
+        };
+        nitroPoseExercises.startSession(999_999, 0);
+        setPoseEngineReady(true);
+      } catch {
+        if (!disposed) setPoseEngineUnavailable(true);
+      }
+    };
+
+    void initializePoseEngine();
+
+    return () => {
+      disposed = true;
+      nitroPoseExercises.onPoseLost = undefined;
+      nitroPoseExercises.onPoseRegained = undefined;
+      if (initialized) nitroPoseExercises.release();
+    };
+  }, [hasPermission, hasDetectedPose, poseVisible]);
 
   const statusText = useMemo(() => {
     if (paused) return 'המשחק מושהה';
@@ -57,8 +132,7 @@ export function SplitWorkoutScreen({
     return exercise.hebrewName;
   }, [exercise.hebrewName, paused, repState?.activeErrorCode]);
 
-  const cameraUnavailable =
-    !hasPermission || !device || permissionRequested && !hasPermission;
+  const cameraUnavailableNow = !hasPermission || !device || cameraFailed;
 
   return (
     <View style={styles.screen}>
@@ -86,28 +160,47 @@ export function SplitWorkoutScreen({
       </View>
 
       <View style={styles.cameraSlot}>
-        {cameraUnavailable ? (
+        {cameraUnavailableNow ? (
           <Pressable style={styles.noCamera} onPress={hasPermission ? undefined : requestCamera}>
             <Text style={styles.noCameraTitle}>מצלמה אינה זמינה</Text>
             <Text style={styles.noCameraText}>
-              {!hasPermission ? 'הענק הרשאת מצלמה כדי להפעיל מעקב' : 'בדוק את מצלמת המכשיר'}
+              {cameraFailed
+                ? 'לא הצלחנו להתחבר למצלמה. אפשר לנסות שוב בהמשך.'
+                : !hasPermission
+                ? permissionRequested
+                  ? 'צריך לאשר גישה למצלמה בהגדרות המכשיר'
+                  : 'הענק/י גישה למצלמה כדי לזהות מפרקים'
+                : 'בדוק/י את מצלמת המכשיר'}
             </Text>
             {!hasPermission ? <Text style={styles.requestText}>הפעלת מצלמה</Text> : null}
           </Pressable>
-        ) : (
-          <Camera
+        ) : poseEngineReady ? (
+          <SkiaCamera
             style={StyleSheet.absoluteFill}
             device={device}
             isActive={!paused}
-            resizeMode="cover"
-            outputs={[frameOutput]}
+            pixelFormat="yuv"
+            mirrorMode="auto"
+            onFrame={frameProcessor}
+            onError={() => setCameraFailed(true)}
           />
+        ) : (
+          <>
+            <Camera style={StyleSheet.absoluteFill} device={device} isActive={!paused} />
+            <View style={styles.initializingOverlay}>
+              <Text style={styles.poseStatus}>
+                {poseEngineUnavailable
+                  ? 'לא הצלחנו להפעיל את זיהוי התנועה'
+                  : 'מפעילים זיהוי מפרקים...'}
+              </Text>
+            </View>
+          </>
         )}
-        {landmarks ? (
-          <SkeletonOverlay
-            landmarks={landmarks}
-            jointStatuses={repState?.jointStatuses}
-          />
+        {!cameraUnavailableNow && poseEngineReady ? (
+          <View pointerEvents="none" style={styles.poseHint}>
+            <Text style={styles.poseStatus}>הצג/י את כל הגוף כדי לסמן את המפרקים</Text>
+            <Text style={styles.privacyHint}>ניתוח התנועה מתבצע במכשיר בלבד</Text>
+          </View>
         ) : null}
         {repState ? (
           <View style={styles.repHud}>
@@ -155,6 +248,26 @@ const styles = StyleSheet.create({
   noCameraTitle: { color: '#ffffff', fontSize: 18, fontWeight: '700', writingDirection: 'rtl' },
   noCameraText: { color: '#bbbbbb', marginTop: 8, writingDirection: 'rtl' },
   requestText: { color: '#62A0FF', marginTop: 12, writingDirection: 'rtl' },
+  initializingOverlay: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(0,0,0,0.42)',
+  },
+  poseHint: {
+    position: 'absolute',
+    top: 12,
+    end: 12,
+    alignItems: 'flex-end',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.68)',
+  },
+  poseStatus: { color: '#ffffff', fontSize: 13, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl' },
+  privacyHint: { color: '#C4F278', fontSize: 11, textAlign: 'right', writingDirection: 'rtl' },
   repHud: {
     position: 'absolute',
     end: 12,

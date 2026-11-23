@@ -8,6 +8,7 @@ import { theme } from '../components/ui/theme';
 import { usePlanStore } from '../store/usePlanStore';
 import { useUserStore } from '../store/useUserStore';
 import type { UserProfile } from '../types/workout.types';
+import { upsertProfile } from '../services/api';
 
 const STEPS = ['קצת עליך', 'מה המטרה?', 'הניסיון שלך', 'ימים לאימון', 'הקצב שלך'];
 const GOALS = [
@@ -75,6 +76,12 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
       minutesPerSession,
     };
     setProfile(profile);
+    try {
+      await upsertProfile(profile);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'לא הצלחנו לשמור את הפרופיל כרגע.');
+      return;
+    }
     setFormError(null);
     try {
       await generate(profile);

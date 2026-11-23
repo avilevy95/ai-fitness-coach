@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import WeeklyScheduleView from '../components/calendar/WeeklyScheduleView';
 import SplitWorkoutScreen from '../components/workout/SplitWorkoutScreen';
-import type { SplitWorkoutScreenProps } from '../components/workout/SplitWorkoutScreen';
 import { PrimaryButton } from '../components/ui/PrimaryButton';
 import { ScreenContainer } from '../components/ui/ScreenContainer';
 import { StatCard } from '../components/ui/StatCard';
@@ -12,15 +11,13 @@ import { getNextWorkout } from '../core/scheduler/defaultBeginnerPlan';
 import { usePlanStore } from '../store/usePlanStore';
 import { useUserStore } from '../store/useUserStore';
 import { useWorkoutSessionStore } from '../store/useWorkoutSessionStore';
-import type { ExerciseRepState, JointName, LandmarkPoint } from '../types/pose.types';
+import type { ExerciseRepState } from '../types/pose.types';
 import type { WorkoutSessionPlan } from '../types/workout.types';
 
 interface DashboardScreenProps {
   onStartWorkout?: (workout: WorkoutSessionPlan) => void;
   onWorkoutFinish?: (workout: WorkoutSessionPlan) => void;
-  onWorkoutFrame?: SplitWorkoutScreenProps['onFrame'];
   repState?: ExerciseRepState;
-  landmarks?: Partial<Record<JointName, LandmarkPoint>> | readonly LandmarkPoint[] | null;
   onOpenNutrition?: () => void;
   onOpenProfile?: () => void;
 }
@@ -28,9 +25,7 @@ interface DashboardScreenProps {
 export default function DashboardScreen({
   onStartWorkout,
   onWorkoutFinish,
-  onWorkoutFrame,
   repState,
-  landmarks,
   onOpenNutrition,
   onOpenProfile,
 }: DashboardScreenProps) {
@@ -117,8 +112,6 @@ export default function DashboardScreen({
         <SplitWorkoutScreen
           exercise={exercise}
           repState={repState}
-          landmarks={landmarks}
-          onFrame={onWorkoutFrame}
           paused={paused}
           onPause={() => setPaused((value) => !value)}
           onSkip={skipExercise}
