@@ -1,4 +1,4 @@
-import { Audio } from 'expo-av';
+import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { Directory, File, Paths } from 'expo-file-system';
 import { generateCoachAudio } from '../../services/aiService';
 
@@ -14,7 +14,7 @@ export class AudioQueue {
   private readonly lastCueAt = new Map<string, number>();
   private isPlaying = false;
   private readonly queue: CorrectiveCue[] = [];
-  private sound: Audio.Sound | null = null;
+  private sound: AudioPlayer | null = null;
   private readonly now: () => number;
 
   constructor(now: () => number = Date.now) {
@@ -72,17 +72,14 @@ export class AudioQueue {
     const file = new File(directory, `${cue.id.replace(/[^a-zA-Z0-9_-]/g, '_')}.m4a`);
     await file.write(result.audioBase64, { encoding: 'base64' });
 
-    if (this.sound) await this.sound.unloadAsync();
-    const created = await Audio.Sound.createAsync(
-      { uri: file.uri },
-      { shouldPlay: true },
-    );
-    this.sound = created.sound;
+    this.sound?.remove();
+    this.sound = createAudioPlayer(file.uri);
+    this.sound.play();
   }
 
   async clear(): Promise<void> {
     if (this.sound) {
-      await this.sound.unloadAsync();
+      this.sound.remove();
       this.sound = null;
     }
     this.queue.length = 0;

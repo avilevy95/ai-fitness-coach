@@ -244,8 +244,8 @@ Deno.serve(async (request) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-  const openAiApiKey = Deno.env.get('OPENAI_API_KEY');
-  if (!supabaseUrl || !supabaseAnonKey || !openAiApiKey) {
+  const openRouterApiKey = Deno.env.get('OPENROUTER_API_KEY');
+  if (!supabaseUrl || !supabaseAnonKey || !openRouterApiKey) {
     return jsonResponse({ error: 'Server configuration is incomplete' }, 500);
   }
   const authorization = request.headers.get('Authorization');
@@ -273,14 +273,14 @@ Deno.serve(async (request) => {
 
   let generated: { weeklyPlan: WeeklyPlan; nutritionPlan: NutritionPlan };
   try {
-    const completion = await fetch('https://api.openai.com/v1/chat/completions', {
+    const completion = await fetch('https://api.openrouter.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${openAiApiKey}`,
+        Authorization: `Bearer ${openRouterApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'openrouter/free',
         temperature: 0.4,
         response_format: {
           type: 'json_schema',
@@ -332,11 +332,11 @@ Deno.serve(async (request) => {
       }),
     });
     if (!completion.ok) {
-      throw new Error(`OpenAI request failed (${completion.status})`);
+      throw new Error(`OpenRouter request failed (${completion.status})`);
     }
     const completionBody = await completion.json();
     const content = completionBody.choices?.[0]?.message?.content;
-    if (typeof content !== 'string') throw new Error('OpenAI returned an empty plan');
+    if (typeof content !== 'string') throw new Error('OpenRouter returned an empty plan');
     generated = parseGeneratedPlan(JSON.parse(content));
     const scheduledDays = generated.weeklyPlan.sessions.map((session) => session.dayIndex);
     if (

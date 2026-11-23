@@ -8,6 +8,7 @@ import { ScreenContainer } from '../components/ui/ScreenContainer';
 import { StatCard } from '../components/ui/StatCard';
 import { theme } from '../components/ui/theme';
 import { rescheduleSession, produceAdaptiveRecovery } from '../core/scheduler/adaptiveRescheduler';
+import { getNextWorkout } from '../core/scheduler/defaultBeginnerPlan';
 import { usePlanStore } from '../store/usePlanStore';
 import { useUserStore } from '../store/useUserStore';
 import { useWorkoutSessionStore } from '../store/useWorkoutSessionStore';
@@ -65,10 +66,7 @@ export default function DashboardScreen({
     return count;
   }, [sessions]);
   const recovery = weeklyPlan ? produceAdaptiveRecovery(weeklyPlan, now) : [];
-  const nextWorkout = weeklyPlan?.sessions
-    .filter((session) => session.status !== 'completed')
-    .filter((session) => !session.date || new Date(session.date).getTime() >= now.getTime())
-    .sort((a, b) => new Date(a.date ?? '').getTime() - new Date(b.date ?? '').getTime())[0];
+  const nextWorkout = weeklyPlan ? getNextWorkout(weeklyPlan, now) : undefined;
 
   const start = (workout: WorkoutSessionPlan) => {
     setActiveExerciseIndex(0);

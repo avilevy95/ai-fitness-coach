@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { generateFitnessPlan } from '../services/aiService';
+import { createDefaultBeginnerPlan } from '../core/scheduler/defaultBeginnerPlan';
 import type { NutritionPlan, UserProfile, WeeklyPlan } from '../types/workout.types';
 
 interface PlanStore {
@@ -15,7 +15,7 @@ interface PlanStore {
 }
 
 export const usePlanStore = create<PlanStore>((set) => ({
-  weeklyPlan: null,
+  weeklyPlan: createDefaultBeginnerPlan(),
   nutritionPlan: null,
   isGenerating: false,
   isOffline: false,
@@ -23,6 +23,7 @@ export const usePlanStore = create<PlanStore>((set) => ({
   generate: async (profile) => {
     set({ isGenerating: true, error: null });
     try {
+      const { generateFitnessPlan } = await import('../services/aiService');
       const result = await generateFitnessPlan(profile);
       set({
         weeklyPlan: result.weeklyPlan,
@@ -40,5 +41,11 @@ export const usePlanStore = create<PlanStore>((set) => ({
   },
   setPlans: (weeklyPlan, nutritionPlan) => set({ weeklyPlan, nutritionPlan, error: null }),
   updateWeeklyPlan: (weeklyPlan) => set({ weeklyPlan }),
-  clearPlans: () => set({ weeklyPlan: null, nutritionPlan: null, isOffline: false, error: null }),
+  clearPlans: () =>
+    set({
+      weeklyPlan: createDefaultBeginnerPlan(),
+      nutritionPlan: null,
+      isOffline: false,
+      error: null,
+    }),
 }));
